@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>اختبار الاتصال – EduFlow</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Tahoma,"Segoe UI",Arial,sans-serif;background:#F6F8FA;color:#12263A}
+  .wrap{max-width:560px;margin:0 auto;padding:32px 18px}
+  h1{font-size:26px;margin:0 0 6px}
+  p.sub{margin:0 0 24px;color:#3D5568;line-height:1.7}
+  .card{background:#fff;border:1px solid #E1E8EE;border-radius:16px;padding:18px;margin-bottom:12px;display:flex;align-items:center;gap:14px}
+  .icon{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:bold;flex-shrink:0;background:#EEF3F7;color:#3D5568}
+  .ok .icon{background:#DDF3E4;color:#1E7A3C}
+  .fail .icon{background:#FBE1DF;color:#B42318}
+  .title{font-size:17px;font-weight:bold}
+  .detail{font-size:14px;color:#3D5568;margin-top:4px;line-height:1.6;word-break:break-word}
+  .summary{margin-top:20px;padding:18px;border-radius:16px;font-size:18px;font-weight:bold;text-align:center;background:#EEF3F7}
+  .summary.ok{background:#DDF3E4;color:#1E7A3C}
+  .summary.fail{background:#FBE1DF;color:#B42318}
+  button{margin-top:16px;width:100%;min-height:50px;border:none;border-radius:12px;background:#12263A;color:#fff;font-size:17px;font-weight:bold;font-family:inherit;cursor:pointer}
+  .meta{margin-top:18px;font-size:13px;color:#4A5D6E;text-align:center;line-height:1.8}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>اختبار الاتصال – EduFlow</h1>
+  <p class="sub">هذه الصفحة تتأكد أن خدمات البرنامج تعمل من شبكتك. انتظر حتى تنتهي الاختبارات، ثم صوّر الشاشة وابعتها.</p>
+
+  <div class="card ok" id="c-host">
+    <div class="icon">✓</div>
+    <div><div class="title">1. فتح الصفحة (الاستضافة)</div><div class="detail">الصفحة فتحت بنجاح.</div></div>
+  </div>
+  <div class="card" id="c-db">
+    <div class="icon">…</div>
+    <div><div class="title">2. قاعدة البيانات</div><div class="detail">جارٍ الاختبار…</div></div>
+  </div>
+  <div class="card" id="c-auth">
+    <div class="icon">…</div>
+    <div><div class="title">3. خدمة تسجيل الدخول</div><div class="detail">جارٍ الاختبار…</div></div>
+  </div>
+
+  <div class="summary" id="summary">جارٍ الاختبار…</div>
+  <button type="button" id="again">إعادة الاختبار</button>
+  <div class="meta" id="meta"></div>
+</div>
+
+<script>
+var SUPABASE_URL = "https://vgwcurfqhqiwanrlkbwe.supabase.co";
+var SUPABASE_KEY = "sb_publishable_sKpVwBddKTw95I_1UkTmww_i7XvTgke";
+
+function setCard(id, state, text) {
+  var el = document.getElementById(id);
+  el.className = "card " + state;
+  el.querySelector(".icon").textContent = state === "ok" ? "✓" : (state === "fail" ? "✕" : "…");
+  el.querySelector(".detail").textContent = text;
+}
+
+function timedFetch(url, ms) {
+  var ctrl = new AbortController();
+  var t = setTimeout(function () { ctrl.abort(); }, ms);
+  var start = Date.now();
+  return fetch(url, { headers: { apikey: SUPABASE_KEY }, signal: ctrl.signal })
+    .then(function (r) { clearTimeout(t); r.elapsed = Date.now() - start; return r; });
+}
+
+function errText(e) {
+  if (e && e.name === "AbortError") return "انتهت المهلة (15 ثانية) بدون رد. قد تكون الخدمة محجوبة أو الإنترنت ضعيف.";
+  return "تعذّر الاتصال: الخدمة قد تكون محجوبة من هذه الشبكة.";
+}
+
+function run() {
+  setCard("c-db", "", "جارٍ الاختبار…");
+  setCard("c-auth", "", "جارٍ الاختبار…");
+  var sum = document.getElementById("summary");
+  sum.className = "summary"; sum.textContent = "جارٍ الاختبار…";
+  var results = { db: false, auth: false };
+
+  var p1 = timedFetch(SUPABASE_URL + "/rest/v1/connection_test?select=message", 15000)
+    .then(function (r) {
+      if (!r.ok) throw { http: r.status };
+      return r.json().then(function (rows) {
+        var msg = rows && rows[0] ? rows[0].message : "متصل";
+        results.db = true;
+        setCard("c-db", "ok", msg + " (" + r.elapsed + " ms)");
+      });
+    })
+    .catch(function (e) {
+      if (e && e.http) setCard("c-db", "fail", "وصلنا للخادم لكن ظهر خطأ " + e.http + ". (الخدمة غير محجوبة، المشكلة في الإعدادات)");
+      else setCard("c-db", "fail", errText(e));
+    });
+
+  var p2 = timedFetch(SUPABASE_URL + "/auth/v1/health", 15000)
+    .then(function (r) {
+      if (!r.ok) throw { http: r.status };
+      results.auth = true;
+      setCard("c-auth", "ok", "خدمة تسجيل الدخول تعمل (" + r.elapsed + " ms)");
+    })
+    .catch(function (e) {
+      if (e && e.http) setCard("c-auth", "fail", "وصلنا للخادم لكن ظهر خطأ " + e.http + ".");
+      else setCard("c-auth", "fail", errText(e));
+    });
+
+  Promise.all([p1, p2]).then(function () {
+    if (results.db && results.auth) { sum.className = "summary ok"; sum.textContent = "✓ كل الخدمات تعمل من هذه الشبكة"; }
+    else { sum.className = "summary fail"; sum.textContent = "✕ يوجد خدمة لا تعمل. صوّر الشاشة وابعتها"; }
+    document.getElementById("meta").textContent =
+      "وقت الاختبار: " + new Date().toLocaleString("ar") + " — اكتب اسم الشبكة مع الصورة (سيريتل / MTN / إنترنت أرضي)";
+  });
+}
+
+document.getElementById("again").addEventListener("click", run);
+run();
+</script>
+</body>
+</html>
